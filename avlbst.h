@@ -137,7 +137,10 @@ protected:
     virtual void nodeSwap( AVLNode<Key,Value>* n1, AVLNode<Key,Value>* n2);
 
     // Add helper functions here
-
+    void rotateLeft(AVLNode<Key,Value>* n);
+    void rotateRight(AVLNode<Key,Value>* n);
+    void insertFix(AVLNode<Key,Value>* p, AVLNode<Key,Value>* n);
+    void removeFix(AVLNode<Key,Value>* n, int diff);
 
 };
 
@@ -148,7 +151,45 @@ protected:
 template<class Key, class Value>
 void AVLTree<Key, Value>::insert (const std::pair<const Key, Value> &new_item)
 {
-    // TODO
+    if(this->root_ == NULL) {
+        this->root_ = new AVLNode<Key, Value>(new_item.first, new_item.second, NULL);
+        return;
+    }
+
+    AVLNode<Key, Value>* curr = static_cast<AVLNode<Key, Value>*>(this->root_);
+    AVLNode<Key, Value>* n = NULL;
+    int diff = 0;
+    while(n == NULL) {
+        if(new_item.first < curr->getKey()) {
+            if(curr->getLeft() == NULL) {
+                n = new AVLNode<Key, Value>(new_item.first, new_item.second, curr);
+                curr->setLeft(n);
+                diff = -1;
+            }
+            else {
+                curr = curr->getLeft();
+            }
+        }
+        else if(curr->getKey() < new_item.first) {
+            if(curr->getRight() == NULL) {
+                n = new AVLNode<Key, Value>(new_item.first, new_item.second, curr);
+                curr->setRight(n);
+                diff = 1;
+            }
+            else {
+                curr = curr->getRight();
+            }
+        }
+        else {
+            curr->setValue(new_item.second);
+            return;
+        }
+    }
+
+    curr->updateBalance(diff);
+    if(curr->getBalance() != 0) {
+        insertFix(curr, n);
+    }
 }
 
 /*
@@ -158,7 +199,39 @@ void AVLTree<Key, Value>::insert (const std::pair<const Key, Value> &new_item)
 template<class Key, class Value>
 void AVLTree<Key, Value>:: remove(const Key& key)
 {
-    // TODO
+    AVLNode<Key, Value>* n = static_cast<AVLNode<Key, Value>*>(this->internalFind(key));
+    if(n == NULL) {
+        return;
+    }
+
+    if(n->getLeft() != NULL && n->getRight() != NULL) {
+        AVLNode<Key, Value>* pred =
+            static_cast<AVLNode<Key, Value>*>(BinarySearchTree<Key, Value>::predecessor(n));
+        nodeSwap(n, pred);
+    }
+
+    AVLNode<Key, Value>* child = (n->getLeft() != NULL) ? n->getLeft() : n->getRight();
+    AVLNode<Key, Value>* p = n->getParent();
+    int diff = 0;
+    if(p != NULL) {
+        diff = (p->getLeft() == n) ? 1 : -1;
+    }
+
+    if(child != NULL) {
+        child->setParent(p);
+    }
+    if(p == NULL) {
+        this->root_ = child;
+    }
+    else if(p->getLeft() == n) {
+        p->setLeft(child);
+    }
+    else {
+        p->setRight(child);
+    }
+
+    delete n;
+    removeFix(p, diff);
 }
 
 template<class Key, class Value>
@@ -168,6 +241,223 @@ void AVLTree<Key, Value>::nodeSwap( AVLNode<Key,Value>* n1, AVLNode<Key,Value>* 
     int8_t tempB = n1->getBalance();
     n1->setBalance(n2->getBalance());
     n2->setBalance(tempB);
+}
+
+template<class Key, class Value>
+void AVLTree<Key, Value>::rotateRight(AVLNode<Key,Value>* g)
+{
+    AVLNode<Key, Value>* p = g->getLeft();
+    AVLNode<Key, Value>* gp = g->getParent();
+    AVLNode<Key, Value>* pr = p->getRight();
+
+    g->setLeft(pr);
+    if(pr != NULL) {
+        pr->setParent(g);
+    }
+    p->setRight(g);
+    g->setParent(p);
+    p->setParent(gp);
+
+    if(gp == NULL) {
+        this->root_ = p;
+    }
+    else if(gp->getLeft() == g) {
+        gp->setLeft(p);
+    }
+    else {
+        gp->setRight(p);
+    }
+}
+
+template<class Key, class Value>
+void AVLTree<Key, Value>::rotateLeft(AVLNode<Key,Value>* g)
+{
+    AVLNode<Key, Value>* p = g->getRight();
+    AVLNode<Key, Value>* gp = g->getParent();
+    AVLNode<Key, Value>* pl = p->getLeft();
+
+    g->setRight(pl);
+    if(pl != NULL) {
+        pl->setParent(g);
+    }
+    p->setLeft(g);
+    g->setParent(p);
+    p->setParent(gp);
+
+    if(gp == NULL) {
+        this->root_ = p;
+    }
+    else if(gp->getLeft() == g) {
+        gp->setLeft(p);
+    }
+    else {
+        gp->setRight(p);
+    }
+}
+
+template<class Key, class Value>
+void AVLTree<Key, Value>::insertFix(AVLNode<Key,Value>* p, AVLNode<Key,Value>* n)
+{
+    AVLNode<Key, Value>* g = p->getParent();
+    if(g == NULL) {
+        return;
+    }
+
+    bool pIsLeft = (g->getLeft() == p);
+    g->updateBalance(pIsLeft ? -1 : 1);
+
+    if(g->getBalance() == 0) {
+        return;
+    }
+    if(g->getBalance() == 1 || g->getBalance() == -1) {
+        insertFix(g, p);
+        return;
+    }
+
+    if(pIsLeft) {
+        if(p->getBalance() == -1) {
+            rotateRight(g);
+            p->setBalance(0);
+            g->setBalance(0);
+        }
+        else {
+            rotateLeft(p);
+            rotateRight(g);
+            int8_t nb = n->getBalance();
+            if(nb == -1) {
+                p->setBalance(0);
+                g->setBalance(1);
+            }
+            else if(nb == 0) {
+                p->setBalance(0);
+                g->setBalance(0);
+            }
+            else {
+                p->setBalance(-1);
+                g->setBalance(0);
+            }
+            n->setBalance(0);
+        }
+    }
+    else {
+        if(p->getBalance() == 1) {
+            rotateLeft(g);
+            p->setBalance(0);
+            g->setBalance(0);
+        }
+        else {
+            rotateRight(p);
+            rotateLeft(g);
+            int8_t nb = n->getBalance();
+            if(nb == 1) {
+                p->setBalance(0);
+                g->setBalance(-1);
+            }
+            else if(nb == 0) {
+                p->setBalance(0);
+                g->setBalance(0);
+            }
+            else {
+                p->setBalance(1);
+                g->setBalance(0);
+            }
+            n->setBalance(0);
+        }
+    }
+}
+
+template<class Key, class Value>
+void AVLTree<Key, Value>::removeFix(AVLNode<Key,Value>* n, int diff)
+{
+    if(n == NULL) {
+        return;
+    }
+
+    AVLNode<Key, Value>* p = n->getParent();
+    int ndiff = 0;
+    if(p != NULL) {
+        ndiff = (p->getLeft() == n) ? 1 : -1;
+    }
+
+    int b = n->getBalance() + diff;
+
+    if(b == -2) {
+        AVLNode<Key, Value>* c = n->getLeft();
+        int cb = c->getBalance();
+        if(cb == -1) {
+            rotateRight(n);
+            n->setBalance(0);
+            c->setBalance(0);
+            removeFix(p, ndiff);
+        }
+        else if(cb == 0) {
+            rotateRight(n);
+            n->setBalance(-1);
+            c->setBalance(1);
+        }
+        else {
+            AVLNode<Key, Value>* g = c->getRight();
+            int gb = g->getBalance();
+            rotateLeft(c);
+            rotateRight(n);
+            if(gb == 1) {
+                n->setBalance(0);
+                c->setBalance(-1);
+            }
+            else if(gb == 0) {
+                n->setBalance(0);
+                c->setBalance(0);
+            }
+            else {
+                n->setBalance(1);
+                c->setBalance(0);
+            }
+            g->setBalance(0);
+            removeFix(p, ndiff);
+        }
+    }
+    else if(b == 2) {
+        AVLNode<Key, Value>* c = n->getRight();
+        int cb = c->getBalance();
+        if(cb == 1) {
+            rotateLeft(n);
+            n->setBalance(0);
+            c->setBalance(0);
+            removeFix(p, ndiff);
+        }
+        else if(cb == 0) {
+            rotateLeft(n);
+            n->setBalance(1);
+            c->setBalance(-1);
+        }
+        else {
+            AVLNode<Key, Value>* g = c->getLeft();
+            int gb = g->getBalance();
+            rotateRight(c);
+            rotateLeft(n);
+            if(gb == -1) {
+                n->setBalance(0);
+                c->setBalance(1);
+            }
+            else if(gb == 0) {
+                n->setBalance(0);
+                c->setBalance(0);
+            }
+            else {
+                n->setBalance(-1);
+                c->setBalance(0);
+            }
+            g->setBalance(0);
+            removeFix(p, ndiff);
+        }
+    }
+    else if(b == 0) {
+        n->setBalance(0);
+        removeFix(p, ndiff);
+    }
+    else {
+        n->setBalance(b);
+    }
 }
 
 
